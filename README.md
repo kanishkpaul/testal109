@@ -61,7 +61,8 @@ This repository contains an independent, from-scratch replication, mathematical 
 ├── results/
 │   ├── figures/                # Visualizations (context sweep, memory, half-life)
 │   ├── context_sweep_results.csv
-│   └── benchmark_results.csv
+│   ├── benchmark_latency.csv
+│   └── half_life_decay_audit.csv
 ├── scripts/                    # Profiling, evaluation, and plotting scripts
 ├── REPRODUCTION_REPORT.md      # Primary scientific reproduction report
 ├── REVIEWER_REPORT.md          # Academic peer review report
