@@ -1,0 +1,2 @@
+model,preset,pos_encoding,seed,steps,batch_size,seq_len,params,test_loss,test_ppl,test_bpc,test_acc,train_tok_s,wall_clock_s,min_half_life,max_half_life,max_prefix_error,device
+transformer,balanced,rope,0,2000,32,256,6048472,1.1660902554692785,3.209420064224267,1.6823126287944725,65.11605455984477,13533.708881466735,1210.6067999169463,0.0,0.0,0.0,mps

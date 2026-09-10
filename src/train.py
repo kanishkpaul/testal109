@@ -216,7 +216,7 @@ def train_model(
 
     # Save checkpoint
     os.makedirs("checkpoints", exist_ok=True)
-    ckpt_path = f"checkpoints/{model_type}_{preset}_s{seed}.pt"
+    ckpt_path = f"checkpoints/{model_type}_{preset}_{pos_encoding}_s{seed}.pt"
     torch.save({"model_state": model.state_dict(), "results": results}, ckpt_path)
 
     # Append to master results.csv
