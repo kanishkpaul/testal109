@@ -16,8 +16,8 @@ def evaluate_stream(model: nn.Module, stream: CharDataStream) -> Dict[str, float
 
     for step_idx in range(len(stream)):
         x, y = stream.get_batch(step_idx)
-        # Full sequence forward pass
-        logits, _ = model(x) if hasattr(model, "pos_embed") else (model(x), None)
+        output = model(x)
+        logits = output[0] if isinstance(output, tuple) else output
         loss = criterion(logits.view(-1, logits.size(-1)), y.view(-1))
         preds = logits.argmax(dim=-1)
 

@@ -153,7 +153,8 @@ def train_model(
         x, y = train_stream.get_batch(step - 1)
         optimizer.zero_grad(set_to_none=True)
 
-        logits, _ = model(x) if hasattr(model, "pos_embed") else (model(x), None)
+        output = model(x)
+        logits = output[0] if isinstance(output, tuple) else output
         loss = criterion(logits.view(-1, vocab_size), y.view(-1))
         loss.backward()
 
