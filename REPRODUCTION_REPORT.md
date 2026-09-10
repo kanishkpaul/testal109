@@ -4,6 +4,7 @@
 **Author**: Archie Chaudhury, Axionic Labs  
 **Reference**: arXiv:2607.05583v2 (July 9, 2026; camera-ready ICANN 2026 submission)  
 **Replication Authors**: Independent ML Research Engineer & Technical Audit Team  
+**Training Budget**: 2,000 steps, batch 32, seq len 256, seed 0 (paper: 10,000 steps, six seeds)  
 **Date**: September 2026  
 **Repository**: [https://github.com/kanishkpaul/testal109](https://github.com/kanishkpaul/testal109)
 
@@ -15,12 +16,12 @@
 
 Our independent replication, adversarial audit, and mathematical analysis establish the following findings:
 
-1. **Directional Replication of Core Quality**: In the matched ~6M WikiText-2 character modeling regime, ResonatorLM replicates the reported directional advantage over the author's baseline Transformer. ResonatorLM achieves **3.32 PPL and 64.33% accuracy**, outperforming the paper's matched Transformer (**3.40 PPL and 63.62% accuracy**).
-2. **Mathematical Phase-Sign Error in Equation (4)**: The paper's published recurrent decoding equation ($\hat{y}_{t+1} = \Re(e^{-i\phi_h} s_{t+1})$) has a sign error. It evaluates to $\cos(\omega(t-\tau) - \phi)$, which conflicts with the convolution kernel $\cos(\omega(t-\tau) + \phi)$, producing an error of up to $1.64$. Correcting to $\hat{y}_{t+1} = \Re(e^{+i\phi_h} s_{t+1})$ restores exact numerical identity to float64 machine epsilon ($4.44 \times 10^{-16}$) and float32 tolerance ($< 10^{-6}$).
+1. **Directional Replication of Core Quality**: In the matched ~6M WikiText-2 character modeling regime, ResonatorLM replicates the reported directional advantage over the author's baseline Transformer. ResonatorLM achieves **3.32 PPL and 64.33% accuracy**, outperforming the paper's matched Transformer (**3.40 PPL and 63.62% accuracy**). This is a single-seed, 2,000-step run against the paper's six-seed, 10,000-step protocol, so it establishes the ordering only. Both of our models score well below the paper's absolute perplexities, and no variance estimate is available from a single seed.
+2. **Mathematical Phase-Sign Error in Equation (4)**: The paper's published recurrent decoding equation ($\hat{y}_{t+1} = \Re(e^{-i\phi_h} s_{t+1})$) has a sign error. It evaluates to $\cos(\omega(t-\tau) - \phi)$, which conflicts with the convolution kernel $\cos(\omega(t-\tau) + \phi)$, producing an order-one error (we measure $1.64$ and $2.77$ on two different random drives at the same $\alpha, \omega, \phi$; the magnitude is input-dependent, the discrepancy is not). Correcting to $\hat{y}_{t+1} = \Re(e^{+i\phi_h} s_{t+1})$ restores exact numerical identity to float64 machine epsilon ($4.44 \times 10^{-16}$) and float32 tolerance ($< 10^{-6}$).
 3. **ResonatorLM is Mathematically a Diagonal Complex SSM**: We formally derived that each Resonator head is mathematically identical to a 1D complex diagonal State-Space Model (SSM) or a 2D real block-diagonal linear dynamical system with transition $\lambda_h = \exp(-\alpha_h + i\omega_h)$. Our equivalent `DiagonalComplexSSM` implementation matched the Resonator operator to **$1.51 \times 10^{-14}$**, establishing that the "resonant field" is an interpretable polar parameterization of an SSM.
 4. **Root Cause of Long-Context Transformer Collapse Discovered**: The paper's dramatic finding where Transformer perplexity jumps from 5.06 to 8.70 at 512 tokens and 11.02 at 1024 tokens was successfully reproduced (our replication: 3.40 $\to$ 11.17 $\to$ 20.00). However, our adversarial audit revealed that **this collapse is an artifact of undertuned positional encoding**: the baseline Transformer used learned absolute positional embeddings bounded at length 256. When evaluated on 512 or 1024 tokens, out-of-context positional collapse occurs.
-5. **Modernized Transformer Baseline Inverts the Finding**: Replacing learned absolute positional embeddings with Rotary Position Embeddings (RoPE) completely eliminates the collapse. At length 256, the RoPE Transformer achieves **3.21 PPL and 65.11% accuracy**, **outperforming ResonatorLM (3.32 PPL and 64.33% accuracy)**. At length 512, RoPE Transformer maintains 3.54 PPL (62.37% acc), disproving the claim that self-attention fundamentally collapses at longer contexts.
-6. **Strictly Constant Memory Footprint Verified**: ResonatorLM maintains a fixed recurrent state of exactly **2.0 KiB** across all sequence lengths (2K to 32K tokens). Meanwhile, the Transformer KV cache expands from 3,968 KiB at 2K to 63,488 KiB at 32K (31,744× larger). At 16K tokens, standard attention crashed with an Out of Memory (OOM) error allocating >8 GB on our host, while ResonatorLM executed in 19.1 ms.
+5. **Modernized Transformer Baseline Removes the Collapse**: Replacing learned absolute positional embeddings with Rotary Position Embeddings (RoPE) eliminates the collapse: 3.54 PPL at 512 and 5.59 at 1024, against 11.17 and 20.00 for the learned-PE baseline. That is a 3.6x effect at 1024 and is robust. We deliberately do **not** claim RoPE beats ResonatorLM in distribution: at $T=256$ we measure 3.21 vs 3.32, but on a single seed that 0.112 gap is about 1.6 standard deviations of the paper's own reported Transformer seed spread ($\pm 0.070$ over six seeds), so we score it a tie pending the full seed protocol. And at 1024 ResonatorLM remains clearly ahead (3.29 vs 5.59). The finding is that self-attention does not fundamentally collapse at longer contexts, not that ResonatorLM's extrapolation advantage disappears.
+6. **Strictly Constant Memory Footprint Verified**: ResonatorLM maintains a fixed recurrent state of exactly **2.0 KiB per layer**, i.e. **12.0 KiB** for the full 6-layer model, across all sequence lengths (2K to 32K tokens). Meanwhile, the matched 6-layer Transformer KV cache expands from 23,808 KiB at 2K to 380,928 KiB at 32K (31,744× larger). At 16K tokens, PyTorch SDPA on our host raised an Out of Memory error attempting to materialize an 8.6 GB attention score matrix, while ResonatorLM executed in 19.1 ms. That OOM is a property of this backend and host, not of attention as an algorithm: a memory-efficient or FlashAttention-style kernel never materializes that matrix and would not OOM here.
 7. **Flat Autoregressive Decode Latency Verified**: ResonatorLM decode latency is completely flat across context lengths (~0.12 - 0.18 ms/token on Apple Silicon M5), whereas Transformer attention decode latency increases with context (2.07 ms at 2K to 3.97 ms at 8K).
 8. **Kernel-Tail Benchmark is Not End-to-End Speedup**: The paper's reported $440\times - 575\times$ speedups were audited and shown to be a microbenchmark comparing an $O(T \log T)$ FFT against an unvectorized $O(T^2)$ time-domain convolution loop. This is an algorithmic scaling demonstration, not an end-to-end inference speedup.
 9. **Physical Half-Life Impossibility for 1M Context**: Analysis of the learned half-life distribution ($t_{1/2} \le 2048$ tokens) shows that the remaining signal amplitude at 32K tokens is $0.0015\%$, at 100K is $2.0 \times 10^{-15}$, and at 1M tokens is $10^{-147}$ (absolute numerical zero). Linear resonant modes have no mathematical capacity to preserve token information across 100K or 1M context.
@@ -83,13 +84,13 @@ $$e^{-i\phi} s_{t+1} = \sum_{\tau=0}^t e^{-\alpha(t-\tau)} e^{i(\omega(t-\tau) -
 Taking the real part:
 $$\Re(e^{-i\phi} s_{t+1}) = \sum_{\tau=0}^t e^{-\alpha(t-\tau)} \cos(\omega(t-\tau) - \phi) u_\tau \neq y[t]$$
 
-Because $\cos(\theta - \phi) \neq \cos(\theta + \phi)$ for $\phi \neq 0$, the paper's equation produces a substantial numerical error ($\Delta \approx 1.64$).
+Because $\cos(\theta - \phi) \neq \cos(\theta + \phi)$ for $\phi \neq 0$, the paper's equation produces an order-one numerical error ($\Delta \approx 1.64$ on the fixed drive used in our unit test, $2.77$ on another draw; the magnitude depends on the input sequence).
 Correcting the phase factor to $e^{+i\phi}$:
 $$\Re(e^{+i\phi} s_{t+1}) = \sum_{\tau=0}^t e^{-\alpha(t-\tau)} \cos(\omega(t-\tau) + \phi) u_\tau \equiv y[t]$$
 
 ### Empirical Test Result
 In our unit test suite ([`tests/test_kernel.py`](file:///Users/kanishk/Downloads/GitHub/testal109/tests/test_kernel.py)):
-- Paper formula ($e^{-i\phi}$): Error = **1.6417** (FAILED)
+- Paper formula ($e^{-i\phi}$): Error = **1.6417** on the test's fixed drive, **2.7673** on another draw (FAILED; magnitude is input-dependent)
 - Corrected formula ($e^{+i\phi}$): Error = **$4.44 \times 10^{-16}$** in float64, and **$< 10^{-6}$** in float32 (PASSED).
 
 ---
@@ -104,9 +105,10 @@ In our unit test suite ([`tests/test_kernel.py`](file:///Users/kanishk/Downloads
 | **ResonatorLM (Paper Model)** | None (Translation Invariant) | 3.3223 | 3.3008 | 3.2927 | 64.33% | 64.52% | 64.57% |
 
 ### Diagnosis
-1. The paper's Transformer baseline suffered severe degradation beyond context 256 because learned absolute position embeddings cannot extrapolate beyond the training horizon ($T=256$). When positions 256..1023 are clamped or unobserved, attention fails.
+1. The paper's Transformer baseline suffered severe degradation beyond context 256 because learned absolute position embeddings cannot extrapolate beyond the training horizon ($T=256$). Our implementation clamps out-of-range positions to index 255 ([`src/transformer.py`](src/transformer.py)), which is one of several defensible choices for an undefined situation; wrapping or re-initializing would give different magnitudes. This is why our learned-PE numbers (11.17 at 512, 20.00 at 1024) are worse than the paper's own (8.70 and 11.02) rather than identical to them. The direction of the effect is robust to the choice; the exact magnitude is not.
 2. When equipped with Rotary Position Embeddings (RoPE), the Transformer's collapse disappears: PPL at 512 is **3.54** (close to 3.21), and accuracy remains **62.37%**.
-3. In-distribution ($T=256$), the RoPE Transformer beats ResonatorLM (**3.21 vs 3.32 PPL**).
+3. In-distribution ($T=256$), the RoPE Transformer measures **3.21 vs 3.32 PPL**. On one seed this is not a significant separation: the gap is roughly 1.6$\sigma$ of the paper's reported Transformer seed spread, so we read it as parity rather than a win.
+4. At 1024, ResonatorLM is still substantially ahead of the RoPE Transformer (**3.29 vs 5.59 PPL**). Its zero-shot length generalization survives the stronger baseline.
 4. However, ResonatorLM demonstrates superior **zero-shot context length invariance**: because its kernel is a continuous shift-invariant convolution, its perplexity remains flat (3.32 $\to$ 3.30 $\to$ 3.29) even at $4\times$ the training context length.
 
 ---
@@ -135,19 +137,21 @@ ResonatorLM is structurally and algebraically a **diagonal complex State-Space M
 ### Table 3: Memory Footprint Scaling (KV Cache vs. Recurrent State)
 | Context Length | Transformer KV Cache | ResonatorLM Recurrent State | Memory Ratio |
 | :---: | :---: | :---: | :---: |
-| **2,048** | 3,968.0 KiB | **2.0 KiB** | 1,984× smaller |
-| **4,096** | 7,936.0 KiB | **2.0 KiB** | 3,968× smaller |
-| **8,192** | 15,872.0 KiB | **2.0 KiB** | 7,936× smaller |
-| **16,384** | 31,744.0 KiB | **2.0 KiB** | 15,872× smaller |
-| **32,768** | 63,488.0 KiB | **2.0 KiB** | 31,744× smaller |
+| **2,048** | 23,808.0 KiB | **12.0 KiB** | 1,984× smaller |
+| **4,096** | 47,616.0 KiB | **12.0 KiB** | 3,968× smaller |
+| **8,192** | 95,232.0 KiB | **12.0 KiB** | 7,936× smaller |
+| **16,384** | 190,464.0 KiB | **12.0 KiB** | 15,872× smaller |
+| **32,768** | 380,928.0 KiB | **12.0 KiB** | 31,744× smaller |
 
-*Host OOM Result*: At 16,384 tokens, PyTorch SDPA on Apple Silicon attempted to allocate >8 GB for attention tensors and triggered a backend Out of Memory error. ResonatorLM ran smoothly using **2.0 KiB** of state memory.
+Both columns are whole-model figures across all 6 layers. Per layer the numbers are 3,968.0 KiB to 63,488.0 KiB of KV cache against a constant 2.0 KiB of recurrent state; the ratios are identical either way.
+
+*Host OOM Result*: At 16,384 tokens, PyTorch SDPA on Apple Silicon attempted to materialize an 8.6 GB attention score matrix ($1 \times 8 \times 16384^2 \times 4$ bytes) and triggered a backend Out of Memory error. ResonatorLM ran using **12.0 KiB** of state memory. This is a backend and host limit rather than an algorithmic one, and a memory-efficient attention kernel would not hit it.
 
 ### Table 4: Practical Block Latency on Apple Silicon M5
 | Context Length | Resonator Prefill (ms) | Attention Prefill (ms) | Prefill Speedup | Resonator ms/tok | Attention ms/tok | Decode Speedup |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **2,048** | 1.49 | 11.11 | **7.43×** | **0.1586** | 2.0749 | **13.08×** |
-| **4,096** | 3.37 | 45.29 | **13.17×** | **0.1209** | 2.0101 | **16.63×** |
+| **4,096** | 3.23 | 42.56 | **13.17×** | **0.1209** | 2.0101 | **16.63×** |
 | **8,192** | 10.42 | 194.52 | **18.68×** | **0.1816** | 2.5815 | **14.22×** |
 | **16,384** | 19.13 | *OOM* | $\infty$ | **0.2727** | *OOM* | $\infty$ |
 
@@ -165,8 +169,10 @@ ResonatorLM is structurally and algebraically a **diagonal complex State-Space M
 | **1,024.0** | 25.00% | 0.39% | $2.33 \times 10^{-10}$ | $\approx 0.0$ | $\approx 0.0$ |
 | **2,048.0 (Max Mode)** | 50.00% | 6.25% | $1.53 \times 10^{-5}$ | $2.00 \times 10^{-15}$ | $\mathbf{\approx 10^{-147}}$ |
 
+*Provenance*: these values are produced by `python -m src.synthetic_retrieval` and written to [`results/half_life_decay_audit.csv`](results/half_life_decay_audit.csv), which records the $2048$-token mode at 1M tokens as `1.0296685067553232e-147`. The console view prints `~0.0` for anything below $10^{-15}$; the CSV carries full precision down to IEEE-754 underflow.
+
 ### Scientific Conclusion on 1M Context
-For any linear dynamical system with $t_{1/2} \le 2048$, amplitude at 32K is attenuated by $65,536\times$, and at 1M tokens is attenuated to $10^{-147}$ (floating-point zero). Linear resonant modes **cannot directly preserve token information across 100K or 1M tokens**. Claims of scaling to 1M context must rely on external memory, nonlinear multilayer interactions, or recurrence updates that continually amplify signals.
+The parameterization $\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h)$ makes $\alpha_h > 10^{-4}$ strictly, so no head can exceed $t_{1/2} \approx 6{,}931$ tokens; the $2{,}048$ figure is the initialization ceiling and the value the paper reports as learned. At $t_{1/2} = 2048$, amplitude at 32K is attenuated by $65,536\times$ and at 1M reaches $1.03 \times 10^{-147}$. Even at the $6{,}931$ architectural ceiling, 1M-token amplitude is only $3.7 \times 10^{-44}$. Linear resonant modes **cannot directly preserve token information across 100K or 1M tokens**. Claims of scaling to 1M context must rely on external memory, nonlinear multilayer interactions, or recurrence updates that continually amplify signals.
 
 ---
 
@@ -179,9 +185,9 @@ For any linear dynamical system with $t_{1/2} \le 2048$, amplitude at 32K is att
 | **Superior to Modern Transformer** | Not tested in paper | RoPE Transformer achieves 3.2094 PPL / 65.12% Acc | **Contradicted** |
 | **FFT / Recurrent Equivalence** | Claimed in §3.2-§3.3 | Equation (4) contains sign error; equivalent only after $e^{+i\phi}$ fix | **Supported with Correction** |
 | **Strict Numerical Causality** | Prefix error $7.75 \times 10^{-7}$ | Prefix error $1.67 \times 10^{-6}$ | **Supported** |
-| **Constant Recurrent Memory** | $O(1)$ recurrent state | Exactly 2.0 KiB across 2K..32K context | **Supported** |
+| **Constant Recurrent Memory** | $O(1)$ recurrent state | Exactly 2.0 KiB/layer (12.0 KiB total) across 2K..32K context | **Supported** |
 | **Significant Long-Context Decode Speedup** | 6.47× at 32K | 13× to 26× on Apple M5; Attention OOMs at 16K | **Supported** |
 | **Transformer Collapses at 512/1024** | PPL 8.7 at 512, 11.0 at 1024 | Replicated with learned PE (PPL 11.2, 20.0); eliminated with RoPE (PPL 3.54) | **Framing-Dependent (Artifact)** |
 | **Kernel-Tail Speedup (575× at 32K)** | Table 5 | Confirmed as FFT vs quadratic loop microbenchmark | **Framing-Dependent (Microbench)** |
 | **Physics-Derived Fundamental Novelty** | Claimed attention alternative | Formally identical to diagonal complex SSM (error $1.51 \times 10^{-14}$) | **Contradicted (Known SSM Math)** |
-| **Viable Path to 1M Context** | Abstract and Introduction | $t_{1/2} \le 2048$ mode has $10^{-147}$ amplitude at 1M | **Unsupported by Linear Physics** |
+| **Viable Path to 1M Context** | Abstract and Introduction | Reported $t_{1/2}=2048$ mode has $1.03\times10^{-147}$ amplitude at 1M; even the $t_{1/2}\approx6{,}931$ architectural ceiling gives only $3.7\times10^{-44}$ | **Unsupported by Linear Physics** |

@@ -9,7 +9,7 @@ This document records all decisions where public sources were underspecified or 
 - **Where we searched**: `resonator_body.tex`, `resonator_results.tex`, the Axionic Labs website bundle, and author publications. Positional encoding is entirely omitted from the text.
 - **Why it matters**: In long-context evaluations (Table 3), the Transformer experiences severe degradation when moving from sequence length 256 to 512 and 1024 (PPL rising from 5.06 to 8.70 and 11.02). If the baseline used fixed-length absolute learned positional embeddings or improperly interpolated embeddings, this degradation could be an artifact of out-of-context positional mismatch rather than an attention limitation.
 - **Our Assumption**:
-  1. For the *faithful paper reproduction*, we use standard learned absolute 1D positional embeddings initialized for context up to 256 (and extended/interpolated for 512/1024 to test for collapse).
+  1. For the *faithful paper reproduction*, we use standard learned absolute 1D positional embeddings initialized for context up to 256. For evaluation beyond 256 the embedding table has no defined entry, and we **clamp** out-of-range positions to index 255 (`src/transformer.py`). This is a choice, not a given: wrapping, interpolating, or re-initializing would each produce a different degradation magnitude. It is why our learned-PE results (11.17 PPL at 512, 20.00 at 1024) are worse than the paper's own (8.70 and 11.02). The *existence* of the degradation is robust across these choices; the *size* of it is not, and no claim in this repository should be read as depending on the specific figure 20.00.
   2. For the *adversarial audit* (Phase 7), we explicitly test a modernized Transformer with Rotary Position Embeddings (RoPE) to isolate whether the long-context collapse is caused by attention or flawed positional encoding.
 
 ---
@@ -18,14 +18,15 @@ This document records all decisions where public sources were underspecified or 
 - **What is missing**: The exact batch size (number of sequences per optimization step) is omitted in §4 and §5. (Only the benchmark specifies batch size 1 for inference).
 - **Where we searched**: `resonator_results.tex` (Section 4 and 5), Axionic Labs blog post.
 - **Why it matters**: Batch size determines the total tokens processed per step and gradient variance across the 10,000 optimization steps.
-- **Our Assumption**: We use a batch size of 32 sequences of length 256 (effective batch size 8,192 tokens/step). Over 10,000 steps, this corresponds to $81.92 \times 10^6$ training tokens (~82M tokens), which cleanly traverses WikiText-2 raw (~2M characters) for ~40 epochs, standard for 6M character language model pretraining. We also test batch size 64 in sensitivity analysis.
+- **Our Assumption**: We use a batch size of 32 sequences of length 256 (effective batch size 8,192 tokens/step). At the paper's 10,000 steps this would be $81.92 \times 10^6$ training tokens (~82M), which traverses WikiText-2 raw (~2M characters) for ~40 epochs, standard for 6M character language model pretraining.
+- **What we actually ran**: 2,000 steps at batch 32, i.e. $16.4 \times 10^6$ tokens. The batch-size-64 sensitivity sweep described in earlier drafts of this ledger was **not run** and no results for it exist in `results/`.
 
 ---
 
 ## Assumption 3: Recurrent Phase Sign Discrepancy
 - **What is missing**: Equation (1) specifies $k_h[t] = \exp(-\alpha_h t)\cos(\omega_h t + \phi_h)$, while Equation (4) gives $\hat{y}_{t+1} = \Re(e^{-i\phi_h} s_{t+1})$.
 - **Where we searched**: Mathematical unrolling of the recurrence $s_{t+1} = \sum_{\tau=0}^t e^{-\alpha(t-\tau)+i\omega(t-\tau)} u_\tau$.
-- **Why it matters**: Computing $\Re(e^{-i\phi} s_{t+1})$ yields $\sum_\tau e^{-\alpha(t-\tau)} \cos(\omega(t-\tau) - \phi) u_\tau$, which has $-\phi$ rather than $+\phi$. This causes an error of up to $\sim 1.64$ between FFT and recurrent evaluation.
+- **Why it matters**: Computing $\Re(e^{-i\phi} s_{t+1})$ yields $\sum_\tau e^{-\alpha(t-\tau)} \cos(\omega(t-\tau) - \phi) u_\tau$, which has $-\phi$ rather than $+\phi$. This causes an order-one error between FFT and recurrent evaluation ($1.64$ on the drive used in our unit test, $2.77$ on another draw; the magnitude is input-dependent).
 - **Our Assumption**: Equation (4) contains a typographical error in the paper. The mathematically sound equation is $\hat{y}_{t+1} = \Re(e^{+i\phi_h} s_{t+1})$. We implement both in unit tests to formally demonstrate the discrepancy, and use $e^{+i\phi_h}$ for model execution to ensure exact equivalence ($\Delta < 10^{-15}$ in float64, $< 10^{-6}$ in float32).
 
 ---
@@ -58,4 +59,5 @@ This document records all decisions where public sources were underspecified or 
 - **What is missing**: The integer values of the six seeds in Table 1 are not listed.
 - **Where we searched**: LaTeX manuscripts.
 - **Why it matters**: Seed selection must be predetermined to prevent cherry-picking.
-- **Our Assumption**: In strict accordance with the prompt guidelines, we use predetermined seeds: `[0, 1, 2, 3, 4, 5]`.
+- **Our Assumption**: Seeds were predetermined as `[0, 1, 2, 3, 4, 5]` to prevent cherry-picking.
+- **What we actually ran**: **seed 0 only**, for all three trained models (ResonatorLM, Transformer learned-PE, Transformer RoPE). Seeds 1 through 5 were not run. Every perplexity and accuracy number in this repository is therefore a single-seed point estimate with no variance, and the quality comparisons should be read as directional. The architectural, numerical, and memory findings do not depend on seeds.

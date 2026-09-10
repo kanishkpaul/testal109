@@ -47,11 +47,6 @@ def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, start_pos: int = 0) -
     cos = torch.cos(freqs).unsqueeze(0).unsqueeze(0)  # (1, 1, T, dim)
     sin = torch.sin(freqs).unsqueeze(0).unsqueeze(0)
 
-    def rotate_half(x):
-        x1 = x[..., :dim]
-        x2 = x[..., dim:d_h_even]
-        return torch.cat([-x2, x1], dim=-1)
-
     q_rot = q[..., :d_h_even]
     k_rot = k[..., :d_h_even]
 

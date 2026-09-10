@@ -25,13 +25,13 @@ def half_life_decay_audit(
         row_str = f"{hl:<12.1f} | "
         for d in distances:
             # Amplitude decay: A(d) = 2^(-d / hl)
+            # Only zero out true IEEE-754 underflow (2^-1074 is the smallest
+            # subnormal double). Clamping earlier than this would discard real,
+            # representable values such as the 2^-488.28 ~ 1.05e-147 amplitude
+            # that a 2048-token half-life retains at 1M tokens.
             exponent = -d / hl
-            if exponent < -100:
-                amp = 0.0
-                energy = 0.0
-            else:
-                amp = 2.0 ** exponent
-                energy = amp ** 2
+            amp = 2.0 ** exponent if exponent > -1074.0 else 0.0
+            energy = amp ** 2  # may legitimately underflow to 0.0
             row[f"amp_{d}"] = amp
             row[f"energy_{d}"] = energy
 

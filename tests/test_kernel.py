@@ -187,6 +187,31 @@ class TestResonantFieldMixer(unittest.TestCase):
         mixer.raw_omega.data.fill_(100.0)
         self.assertLess(mixer.omega.max().item(), math.pi)
 
+    def test_half_life_architectural_ceiling(self):
+        """No head can exceed t_half = ln2/alpha_min, regardless of training.
+
+        Guards the long-context argument. Reports must not say half-lives are
+        "capped at 2048": 2048 is the initialisation ceiling, while the hard
+        bound comes from alpha = alpha_min + softplus(raw) > alpha_min.
+        """
+        alpha_min = 1e-4
+        mixer = ResonantFieldMixer(d_model=self.d_model, n_heads=self.n_heads, alpha_min=alpha_min)
+        ceiling = math.log(2.0) / alpha_min
+
+        # Drive raw_alpha to -inf: softplus -> 0, so alpha -> alpha_min from above.
+        mixer.raw_alpha.data.fill_(-1e4)
+        self.assertLess(mixer.half_lives.max().item(), ceiling)
+        self.assertAlmostEqual(mixer.half_lives.max().item(), ceiling, delta=1.0)
+        self.assertAlmostEqual(ceiling, 6931.47, places=1)
+
+        # At initialisation the modes sit at or below the 2048 init ceiling.
+        fresh = ResonantFieldMixer(d_model=self.d_model, n_heads=self.n_heads, max_half_life=2048.0)
+        self.assertLessEqual(fresh.half_lives.max().item(), 2048.0 + 1e-3)
+
+        # The 1M-token amplitude argument must hold at BOTH bounds.
+        self.assertLess(2.0 ** (-1_000_000 / 2048.0), 1e-146)
+        self.assertLess(2.0 ** (-1_000_000 / ceiling), 1e-43)
+
     def test_constant_recurrent_state_memory(self):
         """Recurrent state size must be independent of sequence length."""
         mixer = ResonantFieldMixer(d_model=self.d_model, n_heads=self.n_heads)

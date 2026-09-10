@@ -15,9 +15,14 @@ def benchmark_memory(
     d_model_res: int = 256,
     d_model_trans: int = 248,
     n_heads: int = 8,
+    n_layers: int = 6,
     device_str: str = "mps",
 ) -> List[Dict]:
-    """Measures theoretical and actual KV cache vs Recurrent State memory."""
+    """Measures KV cache vs Recurrent State memory for the FULL n_layers model.
+
+    Both figures are whole-model totals. Per-layer figures are these divided by
+    n_layers; the ratio between the two columns is identical either way.
+    """
     device = torch.device(device_str)
     results = []
 
@@ -26,17 +31,16 @@ def benchmark_memory(
     print("-" * 55)
 
     for seq_len in seq_lengths:
-        # Transformer KV cache: 2 tensors (K, V) of shape (1, H, T, D_h)
-        # 2 * 1 * 8 * (248 // 8) * T * 4 bytes (float32)
+        # Transformer KV cache: n_layers * 2 tensors (K, V) of shape (1, H, T, D_h)
         head_dim_trans = d_model_trans // n_heads
-        trans_elements = 2 * 1 * n_heads * head_dim_trans * seq_len
+        trans_elements = n_layers * 2 * 1 * n_heads * head_dim_trans * seq_len
         trans_bytes = trans_elements * 4  # float32 bytes
         trans_kib = trans_bytes / 1024.0
 
-        # Resonator recurrent state: 2 tensors (Real, Imag) of shape (1, H, D_h)
-        # Fixed size independent of sequence length: 2 * 1 * 8 * (256 // 8) * 4 bytes
+        # Resonator recurrent state: n_layers * 2 tensors (Real, Imag) of shape (1, H, D_h).
+        # 2.0 KiB per layer, so 12.0 KiB for the 6-layer model, independent of seq_len.
         head_dim_res = d_model_res // n_heads
-        res_elements = 2 * 1 * n_heads * head_dim_res
+        res_elements = n_layers * 2 * 1 * n_heads * head_dim_res
         res_bytes = res_elements * 4
         res_kib = res_bytes / 1024.0
 
@@ -194,7 +198,14 @@ def benchmark_latency(
 
 
 def benchmark_kernel_tail(seq_lengths: List[int] = [2048, 8192, 16384]) -> List[Dict]:
-    """Audits the kernel-tail benchmark (FFT convolution vs quadratic reference)."""
+    """Audits the kernel-tail benchmark (FFT convolution vs quadratic reference).
+
+    IMPORTANT: for seq_len > 4096 the quadratic reference is NOT run to
+    completion. Only the first 4096 output positions are timed and the result is
+    extrapolated by (seq_len / 4096)^2, which is exact for an O(T^2) loop but is
+    an extrapolation rather than a measurement. The reported speedups above 4096
+    should be read as asymptotic estimates.
+    """
     results = []
     print("\n=== Kernel-Tail Microbenchmark Audit ===")
     print(f"{'Seq Len':<10} | {'FFT Conv (ms)':<15} | {'Quadratic Ref (ms)':<20} | {'Speedup':<10}")
@@ -213,6 +224,7 @@ def benchmark_kernel_tail(seq_lengths: List[int] = [2048, 8192, 16384]) -> List[
         fft_ms = (time.perf_counter() - t0) * 1000.0
 
         # 2. Quadratic causal reference (chunked O(T^2))
+        # NOTE: truncated at 4096 positions and extrapolated below. See docstring.
         t0 = time.perf_counter()
         y_quad = torch.zeros_like(u)
         # Sample or compute chunked quadratic
@@ -230,14 +242,23 @@ def benchmark_kernel_tail(seq_lengths: List[int] = [2048, 8192, 16384]) -> List[
             quad_ms = quad_elapsed * 1000.0
 
         speedup = quad_ms / max(fft_ms, 1e-9)
-        print(f"{seq_len:<10} | {fft_ms:<15.3f} | {quad_ms:<20.2f} | {speedup:<10.1f}x")
+        extrapolated = seq_len > 4096
+        flag = " (extrapolated)" if extrapolated else ""
+        print(f"{seq_len:<10} | {fft_ms:<15.3f} | {quad_ms:<20.2f} | {speedup:<10.1f}x{flag}")
 
         results.append({
             "seq_len": seq_len,
             "fft_ms": fft_ms,
             "quad_ms": quad_ms,
             "speedup": speedup,
+            "quad_extrapolated": extrapolated,
         })
+
+    os.makedirs("results", exist_ok=True)
+    with open(os.path.join("results", "benchmark_kernel_tail.csv"), "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
+        writer.writeheader()
+        writer.writerows(results)
 
     return results
 

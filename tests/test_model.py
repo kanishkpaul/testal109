@@ -59,6 +59,30 @@ class TestModelArchitectures(unittest.TestCase):
             out, caches = transformer(tok, kv_caches=caches, start_pos=t)
             self.assertEqual(out.shape, (2, 1, 64))
 
+    def test_decode_state_cache_size(self):
+        """Whole-model recurrent cache must be 2.0 KiB per layer / 12.0 KiB total.
+
+        Regression guard: reports previously quoted the per-layer figure (2.0 KiB)
+        as the whole-model total. Pin both numbers so they cannot drift apart.
+        """
+        n_layers = 6
+        resonator = ResonatorLM(vocab_size=284, d_model=256, n_layers=n_layers, n_heads=8)
+        states, _ = resonator.init_states(1, torch.device("cpu"), torch.float32)
+
+        self.assertEqual(len(states), n_layers)
+        bytes_total = sum(s[0].numel() + s[1].numel() for s in states) * 4
+        kib_total = bytes_total / 1024.0
+        kib_per_layer = kib_total / n_layers
+
+        self.assertAlmostEqual(kib_per_layer, 2.0, places=6)
+        self.assertAlmostEqual(kib_total, 12.0, places=6)
+
+        # And it must not grow with the length already decoded.
+        for t in range(4):
+            _, states, _ = resonator.step(torch.zeros(1, dtype=torch.long), states, [None] * n_layers)
+        grown = sum(s[0].numel() + s[1].numel() for s in states) * 4
+        self.assertEqual(grown, bytes_total)
+
     def test_resonator_lm_forward_and_recurrent_step(self):
         resonator = ResonatorLM(vocab_size=64, d_model=256, n_layers=2, n_heads=8, d_ff=1024)
         x = torch.randint(0, 64, (2, 16))

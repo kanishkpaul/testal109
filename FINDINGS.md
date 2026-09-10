@@ -19,7 +19,9 @@ Our replicated ResonatorLM achieved:
 - Top-1 character accuracy: 64.33% (paper reported 61.31%).
 - Test bits-per-character: 1.732 (paper reported ~1.912).
 
-The core claim that the recurrent state memory stays constant during generation holds up. The recurrent state uses exactly two floating-point numbers per channel (one real, one imaginary). Across all 6 layers, this comes out to exactly 2.0 KiB of state cache. That number does not budge whether the prompt is 2,048 tokens or 32,768 tokens. In contrast, standard attention KV cache grows linearly from 3.9 MiB at 2K context up to 63.5 MiB at 32K context.
+One caveat on those three numbers, stated up front. We trained for 2,000 steps on seed 0, not the paper's 10,000 steps across six seeds. Our models therefore sit below the paper's reported perplexities on both sides of the comparison, and we cannot estimate seed variance from a single run. The quality ordering matches the paper. The absolute values do not, and we make no claim that they should. Everything in Section 2 below is independent of this budget: those findings are analytic or exactly reproducible.
+
+The core claim that the recurrent state memory stays constant during generation holds up. The recurrent state uses exactly two floating-point numbers per channel (one real, one imaginary). That is 2.0 KiB per layer, so 12.0 KiB across all 6 layers. That number does not budge whether the prompt is 2,048 tokens or 32,768 tokens. In contrast, the KV cache of the matched 6-layer Transformer grows linearly from 23.3 MiB at 2K context to 372 MiB at 32K context, a ratio of roughly 1,984x and 31,744x respectively.
 
 ---
 
@@ -37,7 +39,7 @@ $$\Re\left(e^{-i\phi_h} s_{t+1}\right) = \sum_{\tau=0}^t e^{-\alpha_h(t-\tau)} \
 This produces a phase of $-\phi_h$. But in Section 3.1, Equation (1) defines the convolution kernel with a positive phase:
 $$k_h[t] = e^{-\alpha_h t} \cos(\omega_h t + \phi_h)$$
 
-If someone implements Equation (4) exactly as written with $e^{-i\phi_h}$, the recurrent generation diverges from the FFT convolution with a large maximum error of roughly 1.64 on unit drives. 
+If someone implements Equation (4) exactly as written with $e^{-i\phi_h}$, the recurrent generation diverges from the FFT convolution with a maximum error of order one. The exact figure depends on the drive sequence: we measure 1.64 and 2.77 on two different random drives with the same alpha, omega, and phi. What matters is that the error is order one rather than order machine epsilon. 
 
 When you flip the sign to $e^{+i\phi_h}$, the algebra lines up:
 $$\Re\left(e^{+i\phi_h} s_{t+1}\right) = \cos(\phi_h) s_{\text{real}} - \sin(\phi_h) s_{\text{imag}}$$
@@ -61,7 +63,7 @@ Here is the comparison on the test set:
 | TransformerLM (Strong control) | Rotary (RoPE) | 3.210 | 65.11% | 3.536 | 5.588 |
 
 Three conclusions come out of this test:
-1. When trained on length 256, the RoPE Transformer achieves a perplexity of 3.210 and accuracy of 65.11%, which beats ResonatorLM on its home turf.
+1. When trained on length 256, the RoPE Transformer measures 3.210 perplexity and 65.11% accuracy against ResonatorLM's 3.322 and 64.33%. We would not call that a win. It is one seed, and the 0.112 gap is about 1.6 standard deviations of the seed spread the paper itself reports for its Transformer ($\pm 0.070$ over six seeds). The honest read is that the two are level in distribution, and that settling it needs the full seed protocol.
 2. At length 512, the RoPE Transformer does not blow up. Its perplexity moves modestly from 3.21 to 3.54.
 3. ResonatorLM does generalize better to length 1024 without fine-tuning (staying at 3.29 versus 5.59 for RoPE), but the dramatic collapse to 20.00 shown in the paper was an artifact of testing an outdated baseline.
 
@@ -91,7 +93,7 @@ The paper suggests that because the decoding state takes constant memory, Resona
 
 This claim confuses constant state size with information retention.
 
-The model parameters constrain head half-lives to a maximum of $t_{1/2} = 2048$ tokens. That gives an exponential decay rate $\alpha = \frac{\ln 2}{2048} \approx 0.000338$.
+The half-lives are bounded, though it is worth being precise about where the bound comes from. The parameterization is $\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h)$. Softplus is strictly positive, so $\alpha_h > 10^{-4}$ and no head can ever exceed $t_{1/2} = \ln 2 / 10^{-4} \approx 6{,}931$ tokens. Separately, the initialization spans 2 to 2048 tokens, the paper reports a learned maximum of 2048.0, and our run learns 1526.4. So 2048 is where the modes actually sit, and 6931 is the ceiling they could not pass even if training pushed them there. The argument below holds at either number.
 
 Here is what happens to signal amplitude $A(t) = 2^{-t / t_{1/2}}$ as distance increases:
 - At 2,048 tokens: 50.0% amplitude remains.
