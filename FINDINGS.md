@@ -9,8 +9,8 @@ We wrote this text directly as researchers writing to fellow researchers. We avo
 ## 1. What We Confirmed from the Paper
 
 We built the ResonatorLM architecture and the parameter-matched TransformerLM baseline strictly according to the paper specifications:
-- ResonatorLM: 6 layers, dimension 256, 8 heads, SwiGLU hidden dimension 1024, yielding 6,039,312 parameters.
-- TransformerLM: 6 layers, dimension 248, 8 heads, SwiGLU hidden dimension 992, yielding 6,098,072 parameters (mismatch of 0.96%).
+- ResonatorLM: 6 layers, dimension 256, 8 heads, SwiGLU hidden dimension 1024, yielding 6,053,648 parameters at our 284-symbol vocabulary.
+- TransformerLM: 6 layers, dimension 248, 8 heads, SwiGLU hidden dimension 992, yielding 6,111,960 parameters (mismatch of 0.96%).
 - Dataset: WikiText-2 raw character level with a 284-character vocabulary.
 - Optimization: AdamW, learning rate 0.0005, cosine decay schedule, batch size 32, sequence length 256.
 
@@ -21,7 +21,7 @@ Our replicated ResonatorLM achieved:
 
 One caveat on those three numbers, stated up front. We trained for 2,000 steps on seed 0, not the paper's 10,000 steps across six seeds. Our models therefore sit below the paper's reported perplexities on both sides of the comparison, and we cannot estimate seed variance from a single run. The quality ordering matches the paper. The absolute values do not, and we make no claim that they should. Everything in Section 2 below is independent of this budget: those findings are analytic or exactly reproducible.
 
-The core claim that the recurrent state memory stays constant during generation holds up. The recurrent state uses exactly two floating-point numbers per channel (one real, one imaginary). That is 2.0 KiB per layer, so 12.0 KiB across all 6 layers. That number does not budge whether the prompt is 2,048 tokens or 32,768 tokens. In contrast, the KV cache of the matched 6-layer Transformer grows linearly from 23.3 MiB at 2K context to 372 MiB at 32K context, a ratio of roughly 1,984x and 31,744x respectively.
+The core claim that the recurrent state memory stays constant during generation holds up. The recurrent state uses exactly two floating-point numbers per channel (one real, one imaginary). That is 2.0 KiB per layer of resonant state, 12.0 KiB across 6 layers. Decoding also needs the K=3 depthwise ring buffer, another 3.0 KiB per layer, so the honest total decode cache is 5.0 KiB per layer and 30.0 KiB for the model. Every part of it is constant in sequence length. That number does not budge whether the prompt is 2,048 tokens or 32,768 tokens. In contrast, the KV cache of the matched 6-layer Transformer grows linearly from 23.3 MiB at 2K context to 372 MiB at 32K context, a ratio of roughly 1,984x and 31,744x respectively.
 
 ---
 
@@ -88,12 +88,12 @@ The architecture is fundamentally an S4D-Lin or Linear Recurrent Unit (LRU) vari
 
 ---
 
-### Finding 4: The 1M Context Claim Violates Exponential Decay Limits
-The paper suggests that because the decoding state takes constant memory, ResonatorLM can naturally maintain memory over 1,000,000 tokens.
+### Finding 4: Effective Memory Span Falls Far Short of the Benchmarked Context
+To be fair to the paper first: it never claims 1,000,000-token context. We grepped the LaTeX source and the strings "1M", "million", "100,000" and "1,000,000" do not appear. Its largest stated context is 32K, which is where the block and kernel-tail benchmarks run.
 
-This claim confuses constant state size with information retention.
+The gap we want to flag is narrower and, we think, harder to dismiss: the efficiency claims extend to 32K while the model's effective memory does not. Constant state size is not information retention, and at 32K the reported modes retain essentially nothing.
 
-The half-lives are bounded, though it is worth being precise about where the bound comes from. The parameterization is $\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h)$. Softplus is strictly positive, so $\alpha_h > 10^{-4}$ and no head can ever exceed $t_{1/2} = \ln 2 / 10^{-4} \approx 6{,}931$ tokens. Separately, the initialization spans 2 to 2048 tokens, the paper reports a learned maximum of 2048.0, and our run learns 1526.4. So 2048 is where the modes actually sit, and 6931 is the ceiling they could not pass even if training pushed them there. The argument below holds at either number.
+The half-lives are bounded, though it is worth being precise about where the bound comes from. The parameterization is $\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h)$, so $\alpha_h \ge 10^{-4}$ and no head can exceed $t_{1/2} = \ln 2 / 10^{-4} \approx 6{,}931$ tokens. Softplus is strictly positive in exact arithmetic but underflows to exactly $0$ in float32, so the bound is attained. Separately, the initialization spans 2 to 2048 tokens, the paper reports a learned maximum of 2048.0, and our run learns 1526.4. So 2048 is where the modes actually sit, and 6931 is the ceiling they could not pass even if training pushed them there. The argument below holds at either number.
 
 Here is what happens to signal amplitude $A(t) = 2^{-t / t_{1/2}}$ as distance increases:
 - At 2,048 tokens: 50.0% amplitude remains.

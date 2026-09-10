@@ -19,9 +19,9 @@ The model augments the core resonant convolution with:
 The paper evaluates a 6-layer, 6.04M-parameter ResonatorLM on WikiText-2 (character-level) against a parameter-matched 6-layer TransformerLM (6.11M parameters) trained on $T=256$ token windows. It claims:
 - Superior test perplexity (3.32 vs. 3.40) and accuracy (64.3% vs. 63.6%) at length 256.
 - Massive superior context generalization at length 1024 (test perplexity 3.29 vs. 20.00 for Transformer).
-- $O(1)$ recurrent memory during generation ($2.0\text{ KiB}$ per layer, $12.0\text{ KiB}$ constant cache for the 6-layer model).
+- $O(1)$ recurrent memory during generation ($2.0	ext{ KiB}$ per layer of resonant state, $30.0	ext{ KiB}$ total decode cache for the 6-layer model including the local-path buffer).
 - Up to $575\times$ speedup over quadratic causal attention at 32K context.
-- Potential scaling to 1M+ context lengths with constant per-step generation cost.
+- Constant per-step generation cost at long context (benchmarked to 32K; the paper makes no 1M claim).
 
 ---
 
@@ -31,7 +31,7 @@ The paper evaluates a 6-layer, 6.04M-parameter ResonatorLM on WikiText-2 (charac
    The derivation of the damped resonator kernel $k_h[t] = e^{-\alpha_h t} \cos(\omega_h t + \phi_h)$ and its dual execution—global FFT convolution for prefill/training and constant-memory recurrence for token-by-token generation—is clean, mathematically coherent, and natively supported by standard PyTorch primitives.
 
 2. **Genuinely Constant Recurrent State Memory**:
-   During autoregressive decoding, the recurrent state requires exactly $2$ floats per head dimension ($2 H d_h = 2 d$ floats per layer), totaling exactly **2.0 KiB per layer**, i.e. **12.0 KiB** for the 6-layer model, across all context lengths (2K to 32K). This directly eliminates the linear memory scaling ($O(T)$) of KV caches in standard attention.
+   During autoregressive decoding, the recurrent state requires exactly $2$ floats per head dimension ($2 H d_h = 2 d$ floats per layer), totaling **2.0 KiB per layer**, i.e. **12.0 KiB** of resonant state for the 6-layer model (plus a 3.0 KiB/layer ring buffer for the $K=3$ local path, giving a 30.0 KiB total decode cache), across all context lengths (2K to 32K). This directly eliminates the linear memory scaling ($O(T)$) of KV caches in standard attention.
 
 3. **Inherent Translation Invariance**:
    Because the mixer operates via stationary causal convolutions without absolute positional encodings, it achieves excellent zero-shot context length generalization without catastrophic loss drift (PPL remains flat at ~3.29–3.32 from 256 to 1024 tokens).
@@ -75,7 +75,7 @@ Upon auditing Section 5.3 lines 233–235, this benchmark does not measure end-t
 
 ### 3.5. Thermodynamic / Information-Theoretic Limit on "1M Context"
 The paper speculates that ResonatorLM can naturally maintain memory across 1M+ context lengths due to $O(1)$ state. However, the parameterization restricts head half-lives to:
-$$\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h) > 10^{-4} \implies t_{1/2} = \frac{\ln 2}{\alpha_h} < 6{,}931 \text{ tokens}$$
+$$\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h) \ge 10^{-4} \implies t_{1/2} = \frac{\ln 2}{\alpha_h} \le 6{,}931 \text{ tokens}$$
 with the reported and initialized modes sitting at $t_{1/2} \le 2048$.
 Under continuous exponential decay $e^{-\alpha t}$:
 - At $t = 32,768$ tokens ($16 \times t_{1/2}$), signal amplitude decays to $2^{-16} \approx 1.5 \times 10^{-5}$ ($0.0015\%$).
@@ -94,7 +94,7 @@ To rigorously audit the paper, we implemented the complete ResonatorLM and param
 | Model | Positional Encoding | Length 256 PPL | Length 256 Acc | Length 512 PPL | Length 1024 PPL | Recurrent State Memory |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **TransformerLM (Paper)** | Learned Absolute | 3.4007 | 63.60% | 11.169 | 20.001 | $O(T)$ (KV cache) |
-| **ResonatorLM (Paper)** | None (Causal Conv) | 3.3223 | 64.33% | **3.301** | **3.293** | **12.0 KiB (O(1))** |
+| **ResonatorLM (Paper)** | None (Causal Conv) | 3.3223 | 64.33% | **3.301** | **3.293** | **30.0 KiB (O(1))** |
 | **TransformerLM (Audit)**| Rotary (RoPE) | **3.2101** | **65.11%** | 3.536 | 5.588 | $O(T)$ (KV cache) |
 
 ---

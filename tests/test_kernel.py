@@ -199,9 +199,13 @@ class TestResonantFieldMixer(unittest.TestCase):
         ceiling = math.log(2.0) / alpha_min
 
         # Drive raw_alpha to -inf: softplus -> 0, so alpha -> alpha_min from above.
+        # softplus underflows to exactly 0.0 in float32 here, so alpha attains
+        # alpha_min and the half-life attains the ceiling. Assert <= with a
+        # float32 tolerance rather than a strict <, which sits on a rounding edge.
         mixer.raw_alpha.data.fill_(-1e4)
-        self.assertLess(mixer.half_lives.max().item(), ceiling)
-        self.assertAlmostEqual(mixer.half_lives.max().item(), ceiling, delta=1.0)
+        attained = mixer.half_lives.max().item()
+        self.assertLessEqual(attained, ceiling * (1 + 1e-5))
+        self.assertAlmostEqual(attained, ceiling, delta=1.0)
         self.assertAlmostEqual(ceiling, 6931.47, places=1)
 
         # At initialisation the modes sit at or below the 2048 init ceiling.

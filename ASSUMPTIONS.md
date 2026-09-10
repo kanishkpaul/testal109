@@ -18,7 +18,7 @@ This document records all decisions where public sources were underspecified or 
 - **What is missing**: The exact batch size (number of sequences per optimization step) is omitted in §4 and §5. (Only the benchmark specifies batch size 1 for inference).
 - **Where we searched**: `resonator_results.tex` (Section 4 and 5), Axionic Labs blog post.
 - **Why it matters**: Batch size determines the total tokens processed per step and gradient variance across the 10,000 optimization steps.
-- **Our Assumption**: We use a batch size of 32 sequences of length 256 (effective batch size 8,192 tokens/step). At the paper's 10,000 steps this would be $81.92 \times 10^6$ training tokens (~82M), which traverses WikiText-2 raw (~2M characters) for ~40 epochs, standard for 6M character language model pretraining.
+- **Our Assumption**: We use a batch size of 32 sequences of length 256 (effective batch size 8,192 tokens/step). At the paper's 10,000 steps this would be $81.92 \times 10^6$ training tokens (~82M), which traverses WikiText-2 raw (10,780,437 characters) for about 7.6 epochs, standard for 6M character language model pretraining.
 - **What we actually ran**: 2,000 steps at batch 32, i.e. $16.4 \times 10^6$ tokens. The batch-size-64 sensitivity sweep described in earlier drafts of this ledger was **not run** and no results for it exist in `results/`.
 
 ---

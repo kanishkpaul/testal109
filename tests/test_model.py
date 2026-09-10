@@ -67,21 +67,36 @@ class TestModelArchitectures(unittest.TestCase):
         """
         n_layers = 6
         resonator = ResonatorLM(vocab_size=284, d_model=256, n_layers=n_layers, n_heads=8)
-        states, _ = resonator.init_states(1, torch.device("cpu"), torch.float32)
-
+        states, buffers = resonator.init_states(1, torch.device("cpu"), torch.float32)
         self.assertEqual(len(states), n_layers)
-        bytes_total = sum(s[0].numel() + s[1].numel() for s in states) * 4
-        kib_total = bytes_total / 1024.0
-        kib_per_layer = kib_total / n_layers
 
-        self.assertAlmostEqual(kib_per_layer, 2.0, places=6)
-        self.assertAlmostEqual(kib_total, 12.0, places=6)
+        def cache_bytes(states, buffers):
+            st = sum(s[0].numel() * s[0].element_size() + s[1].numel() * s[1].element_size()
+                     for s in states)
+            bf = sum(b.numel() * b.element_size() for b in buffers if b is not None)
+            return st, bf
 
-        # And it must not grow with the length already decoded.
-        for t in range(4):
-            _, states, _ = resonator.step(torch.zeros(1, dtype=torch.long), states, [None] * n_layers)
-        grown = sum(s[0].numel() + s[1].numel() for s in states) * 4
-        self.assertEqual(grown, bytes_total)
+        # Buffers are lazily allocated inside step(), so decode once first.
+        for _ in range(4):
+            _, states, buffers = resonator.step(
+                torch.zeros(1, dtype=torch.long), states, buffers
+            )
+        st_bytes, buf_bytes = cache_bytes(states, buffers)
+
+        # Resonant state: the paper's B x H x d_h x 2 figure.
+        self.assertAlmostEqual(st_bytes / 1024.0 / n_layers, 2.0, places=6)
+        self.assertAlmostEqual(st_bytes / 1024.0, 12.0, places=6)
+        # The K=3 depthwise local path needs a ring buffer to decode at all.
+        self.assertAlmostEqual(buf_bytes / 1024.0 / n_layers, 3.0, places=6)
+        # So the honest whole-model decode cache is 30.0 KiB, not 12.0.
+        self.assertAlmostEqual((st_bytes + buf_bytes) / 1024.0, 30.0, places=6)
+
+        # And none of it may grow with the length already decoded.
+        for _ in range(8):
+            _, states, buffers = resonator.step(
+                torch.zeros(1, dtype=torch.long), states, buffers
+            )
+        self.assertEqual(cache_bytes(states, buffers), (st_bytes, buf_bytes))
 
     def test_resonator_lm_forward_and_recurrent_step(self):
         resonator = ResonatorLM(vocab_size=64, d_model=256, n_layers=2, n_heads=8, d_ff=1024)
