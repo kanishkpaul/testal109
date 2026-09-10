@@ -61,3 +61,14 @@ This document records all decisions where public sources were underspecified or 
 - **Why it matters**: Seed selection must be predetermined to prevent cherry-picking.
 - **Our Assumption**: Seeds were predetermined as `[0, 1, 2, 3, 4, 5]` to prevent cherry-picking.
 - **What we actually ran**: **seed 0 only**, for all three trained models (ResonatorLM, Transformer learned-PE, Transformer RoPE). Seeds 1 through 5 were not run. Every perplexity and accuracy number in this repository is therefore a single-seed point estimate with no variance, and the quality comparisons should be read as directional. The architectural, numerical, and memory findings do not depend on seeds.
+
+---
+
+## Assumption 8: Character Vocabulary Size
+
+- **What is missing**: The paper states a character vocabulary of "~256 for raw characters/bytes" (§4, l. 13) but never lists the character set or an exact size.
+- **Where we searched**: `resonator_body.tex` §4, `resonator_results.tex` §5.2.
+- **Why it matters**: Vocabulary size changes the embedding and output-head parameter counts and, more importantly, changes the task. A 284-symbol vocabulary is a strictly harder next-character prediction problem than a 256-symbol one, and perplexity is not comparable across the two.
+- **Our Assumption**: We build the vocabulary directly from `wiki.train.raw`, frequency-sorted with an `<unk>` slot at index 0. This yields **284** distinct characters, not ~256. We did not truncate or byte-fold down to 256, because doing so would require an unstated mapping choice.
+- **Consequence**: Our trained models are 6,053,648 (ResonatorLM) and 6,111,960 (Transformer) parameters rather than the 6,039,312 / 6,098,072 a 256-symbol vocabulary would give. This is one of the named candidate explanations for why our absolute perplexities do not match the paper's; see the Reproduction Protocol section of the README.
+

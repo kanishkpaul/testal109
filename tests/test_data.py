@@ -28,13 +28,13 @@ class TestDataPipeline(unittest.TestCase):
             self.assertEqual(roundtrip.char_to_id, tokenizer.char_to_id)
 
         committed = "data/char_vocab.json"
-        if os.path.exists(committed):
-            self.assertEqual(
-                CharacterTokenizer.load(committed).char_to_id,
-                tokenizer.char_to_id,
-                "data/char_vocab.json is stale: it no longer matches the vocabulary "
-                "rebuilt from data/wikitext-2-raw/wiki.train.raw",
-            )
+        self.assertTrue(os.path.exists(committed), "tracked data/char_vocab.json is missing")
+        self.assertEqual(
+            CharacterTokenizer.load(committed).char_to_id,
+            tokenizer.char_to_id,
+            "data/char_vocab.json is stale: it no longer matches the vocabulary "
+            "rebuilt from data/wikitext-2-raw/wiki.train.raw",
+        )
 
         # Test encoding and decoding
         sample = "ResonatorLM: Causal Resonant Field Mixing"

@@ -194,8 +194,11 @@ class TestResonantFieldMixer(unittest.TestCase):
         "capped at 2048": 2048 is the initialisation ceiling, while the hard
         bound comes from alpha = alpha_min + softplus(raw) > alpha_min.
         """
-        alpha_min = 1e-4
-        mixer = ResonantFieldMixer(d_model=self.d_model, n_heads=self.n_heads, alpha_min=alpha_min)
+        # Pin the module DEFAULT, not a literal we pass in, so lowering the
+        # default alpha_min cannot leave this test green.
+        mixer = ResonantFieldMixer(d_model=self.d_model, n_heads=self.n_heads)
+        alpha_min = mixer.alpha_min
+        self.assertEqual(alpha_min, 1e-4)
         ceiling = math.log(2.0) / alpha_min
 
         # Drive raw_alpha to -inf: softplus -> 0, so alpha -> alpha_min from above.

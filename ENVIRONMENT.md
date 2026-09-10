@@ -22,7 +22,7 @@
 - **PyTorch**: 2.10.0+cu128
 - **Precision**: bfloat16 AMP for training; float32 for kernel benchmark
 - **FFT Backend**: cuFFT via `torch.fft`
-- **Attention Reference**: PyTorch Scaled Dot-Product Attention (SDPA / FlashAttention-2 backend)
+- **Attention Reference**: PyTorch Scaled Dot-Product Attention (SDPA). The paper does not state which SDPA backend was selected, so we do not assume one.
 
 ## Evaluation Protocol Alignment
 In accordance with Rule 7:

@@ -58,14 +58,17 @@ def plot_context_sweep(csv_path: str = "results/context_sweep_results.csv", out_
 
 def plot_memory_scaling(out_dir: str = "results/figures"):
     os.makedirs(out_dir, exist_ok=True)
-    contexts = [2048, 4096, 8192, 16384, 32768]
-    # In KiB for float32
-    trans_kv = [3968.0, 7936.0, 15872.0, 31744.0, 63488.0]
-    res_state = [2.0, 2.0, 2.0, 2.0, 2.0]
+    # Derive from the single source of truth rather than hardcoding, so the
+    # figure cannot drift from Table 3 the way it did before.
+    from src.benchmark import benchmark_memory
+    rows = benchmark_memory(device_str="cpu")
+    contexts = [r["seq_len"] for r in rows]
+    trans_kv = [r["trans_kv_kib"] for r in rows]
+    res_state = [r["res_state_kib"] for r in rows]
 
     plt.figure(figsize=(8, 5))
     plt.plot(contexts, trans_kv, marker="s", color="#d95f02", linewidth=2.5, label="Transformer KV Cache (Linear O(T))")
-    plt.plot(contexts, res_state, marker="o", color="#2b5c8f", linewidth=2.5, label="ResonatorLM Recurrent State (Constant O(1))")
+    plt.plot(contexts, res_state, marker="o", color="#2b5c8f", linewidth=2.5, label="ResonatorLM Recurrent State, 6 layers (Constant O(1))")
 
     plt.title("State Memory Footprint vs Context Length", fontsize=13, fontweight="bold")
     plt.xlabel("Context Length (Tokens)", fontsize=11)
@@ -95,7 +98,8 @@ def plot_half_life_decay(out_dir: str = "results/figures"):
     plt.title("Learned Mode Impulse Decay Across Token Distance", fontsize=13, fontweight="bold")
     plt.xlabel("Token Distance (Lags)", fontsize=11)
     plt.ylabel("Remaining Amplitude ($2^{-t/t_{1/2}}$)", fontsize=11)
-    plt.axvline(2048, color="black", linestyle=":", alpha=0.6, label="Max Half-Life (2048)")
+    plt.axvline(2048, color="black", linestyle=":", alpha=0.6, label="Initialization ceiling (2048)")
+    plt.axvline(6931, color="crimson", linestyle="-.", alpha=0.7, label=r"Architectural ceiling $\ln 2/\alpha_{min}$ (6931)")
     plt.axvline(8192, color="gray", linestyle="--", alpha=0.6, label="8K Context")
     plt.grid(True, linestyle="--", alpha=0.6)
     plt.legend(fontsize=9, loc="upper right")

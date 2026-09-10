@@ -29,8 +29,8 @@
 | **Initialization** | Damped resonator log-spaced modes; standard Gaussian for projections | §3.1, l. 64-65 | High | No |
 | **Training Precision** | bfloat16 AMP (on CUDA); float32 in kernel bench | §5.3, l. 202-203 | High | No |
 | **Loss Function** | Cross-entropy next-token prediction | §3.4, l. 131; §4 | High | No |
-| **Parameter Tying** | Unstated (embedding and output LM head untied yields ~6.03M) | Model parameter analysis | High | Untied embedding matches 6.03M exactly |
-| **Vocabulary Size** | Character set (~256 for raw characters/bytes) | §4, l. 13; §5.2 | High | Character vocab size ~256 |
+| **Parameter Tying** | Unstated (embedding and output LM head untied yields ~6.03M) | Model parameter analysis | Medium | Untied embedding gives 6.039M at a 256-symbol vocabulary; our 284-symbol rebuild gives 6.054M |
+| **Vocabulary Size** | Character set (~256 for raw characters/bytes) | §4, l. 13; §5.2 | Low | Paper says ~256; our rebuild of WikiText-2 raw yields **284** distinct characters. See ASSUMPTIONS 8. |
 | **Evaluation Metrics** | Test Perplexity ($\exp(\text{CE})$), Top-1 Accuracy (\%), Train tok/s | §4, l. 19-20; Tab. 1 | High | No |
 | **Seeds** | 6 seeds for matched primary; 3 seeds for breadth/ablations | §4, l. 19-22; Tab. 1 | High | Specific integer seed values unlisted (standard 0..5) |
 | **Hardware** | 1x NVIDIA L4 (24GB VRAM) | §5.3, l. 201 | High | No |
@@ -44,21 +44,21 @@
 | **ResonatorLM Layers** | 6 layers | §4, l. 16 | High | No |
 | **ResonatorLM $d_{\text{model}}$** | 256 | §4, l. 16 | High | No |
 | **ResonatorLM Heads** | 8 heads ($d_h = 32$) | §4, l. 16 | High | No |
-| **Resonator Projections** | Input: $d \to 2d$ ($u$ drive and $g$ gate); Output: $d \to d$ | §3.1, l. 66; §3.4, l. 110 | High | Matches 6.039M param count |
+| **Resonator Projections** | Input: $d \to 2d$ ($u$ drive and $g$ gate); Output: $d \to d$ | §3.1, l. 66; §3.4, l. 110 | High | Matches 6.039M at vocab 256; 6.054M at our vocab 284 |
 | **Normalization** | Pre-RMSNorm before mixer and before FFN | §3.4, l. 131 | High | No |
 | **MLP Sublayer** | SwiGLU MLP ($d_{\text{ff}} = 4 \times d_{\text{model}} = 1024$) | §3.4, l. 131; param count verification | High | No |
 | **Kernel Equation** | $k_h[t] = \exp(-\alpha_h t)\cos(\omega_h t + \phi_h)$ | §3.1, Eq. 1 | High | No |
 | **$\alpha$ Range & Parameterization** | $\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h) > 10^{-4}$ | §3.1, l. 64 | High | No |
 | **$\omega$ Range & Parameterization** | $\omega_h = \pi \cdot \sigma(\tilde{\omega}_h) \in (0, \pi)$ | §3.1, l. 64 | High | No |
 | **$\phi$ Parameterization** | Unconstrained learned phase offset $\phi_h \in \mathbb{R}$ | §3.1, l. 64 | High | No |
-| **Half-life Initialization** | Log-spaced across heads from $t_{1/2} = 2.0$ to $2048.0$ tokens | §3.1, l. 64; Tab. 2 | High | $\alpha_h = \ln 2 / t_{1/2}$ |
-| **Frequency Initialization** | Log/frequency-spaced across $(0, \pi)$ | §3.1, l. 64 | High | Spaced from $\pi / 2048$ to $\pi / 2$ |
+| **Half-life Initialization** | Log-spaced across heads from $t_{1/2} = 2.0$ to $2048.0$ tokens | §3.1, l. 64; Tab. 2 | Medium | $\alpha_h = \ln 2 / t_{1/2}$. Caution: Tab. 2 reports 2.0-2048.0 as *learned* diagnostics, not as the init range. We set our init to match, so "we reproduce the half-life range" is partly circular and should not be read as independent confirmation. |
+| **Frequency Initialization** | Log/frequency-spaced across $(0, \pi)$ | §3.1, l. 64 | High | Code uses $2\pi/2048 = \pi/1024$ up to $\pi/2$ |
 | **FFT Convolution** | $y_h = \mathcal{F}^{-1}(\mathcal{F}(u_h) \odot \mathcal{F}(k_h))$, zero-padded to next power of 2 ($\ge 2T$) | §3.2, Eq. 3, l. 79 | High | No |
 | **Recurrent Step** | $s_{t+1} = \lambda_h s_t + u_t$, $\lambda_h = e^{-\alpha_h + i\omega_h}$ | §3.3, Eq. 4-5 | High | No |
 | **Recurrent Output** | $\hat{y}_{t+1} = \Re(e^{+i\phi_h} s_{t+1})$ (paper writes $e^{-i\phi}$, proved sign typo) | §3.3, Eq. 4 | High | Math discrepancy diagnosed |
 | **Recurrent State Size** | $B \times H \times d_h \times 2$ (real and imaginary tensors) | §3.3, l. 94 | High | No |
 | **Head Coupling Matrix** | $C = I + \frac{\lambda_c}{\sqrt{H}}\tanh(\widetilde{C})$, with $\lambda_c = 1.0$ | §3.4, Eq. 6-7; Tab. 2 | High | No |
-| **Local Lexical Path** | Depthwise causal 1D conv ($K=3$ or $4$) + learned channel scale $s$ | §3.4, Eq. 8 | High | Kernel size $K$ unstated (3 standard) |
+| **Local Lexical Path** | Depthwise causal 1D conv ($K>0$, size unstated) + learned channel scale $s$ | §3.4, Eq. 8 | Low | Paper states only $K>0$; the "3 or 4" is our inference from Mamba/H3 convention, not the paper |
 | **Output Gating** | $z_t = \gamma_t \odot \operatorname{flatten}(\bar{y}_t) + s \odot l_t$, where $\gamma = \sigma(g)$ | §3.4, Eq. 8 | High | No |
 | **Prefill Terminal State** | Weighted sum of past drives $u_t$ under complex decay factor | §3.2, l. 81-82 | High | No |
 | **Practical Block Benchmark** | $B=1$, decode len 128, 5 timed after 2 warmups, device sync | §5.3, l. 204-207 | High | No |

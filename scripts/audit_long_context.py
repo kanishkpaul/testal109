@@ -1,6 +1,6 @@
 """Adversarial Audit: Long-Context Investigation (256, 512, 1024).
 
-Investigates whether the paper's reported Transformer collapse (PPL jumping from 4.6 to 8.7 at 512 and 11.0 at 1024)
+Investigates whether the paper's reported Transformer collapse (PPL jumping from 5.06 to 8.70 at 512 and 11.02 at 1024)
 is caused by fundamental attention limitations, or by evaluating learned absolute positional embeddings beyond
 their trained context length, or undertuned baseline positional encoding.
 """

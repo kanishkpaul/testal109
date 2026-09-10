@@ -101,8 +101,8 @@ Here is what happens to signal amplitude $A(t) = 2^{-t / t_{1/2}}$ as distance i
 - At 2,048 tokens: 50.0% amplitude remains.
 - At 8,192 tokens (4 half-lives): 6.25% amplitude remains.
 - At 32,768 tokens (16 half-lives): 0.0015% amplitude remains ($1.5 \times 10^{-5}$).
-- At 100,000 tokens (48.8 half-lives): amplitude drops to $2.0 \times 10^{-15}$, which hits the 64-bit float machine precision limit and is zero in 32-bit float.
-- At 1,000,000 tokens (488 half-lives): amplitude drops to $10^{-147}$, which underflows to absolute zero.
+- At 100,000 tokens (48.8 half-lives): amplitude drops to $2.0 	imes 10^{-15}$. That is still exactly representable in float32 (whose smallest normal is $1.18 	imes 10^{-38}$), so the problem is signal to noise, not representability.
+- At 1,000,000 tokens (488 half-lives): amplitude drops to $1.03 	imes 10^{-147}$. Representable in float64, identically zero in float32 or bfloat16, and far below any conceivable signal floor in either.
 
 Any linear time-invariant channel with exponential damping loses all signal long before 100,000 tokens. Unless the model adds undamped poles ($\alpha = 0$) or input-dependent selective gating that can stop decay on important tokens, it cannot retain memories across 1M context.
 
@@ -111,14 +111,14 @@ Any linear time-invariant channel with exponential damping loses all signal long
 ### Finding 5: The 575x Speedup Measures an Unvectorized Microbenchmark
 Section 5.3 of the paper highlights an up to $575\times$ speedup at 32K context length.
 
-Looking at the LaTeX source in lines 233 to 235 shows that this was not measured on a full language model pass against optimized causal attention like FlashAttention. It compared a parallel cuFFT call against a nested Python loop running an unvectorized causal convolution reference.
+The paper is upfront about this: its own Table 5 caption says the benchmark "should not be interpreted as an end-to-end model speedup", and the Limitations section repeats it. Our criticism is narrower, that the abstract and introduction quote 440x and 575x without carrying that caveat. On the reference itself, the paper reports a winning chunk size of 32, which implies a chunked time-domain reference rather than the unvectorized loop we first assumed; either way it is a quadratic O(T^2) baseline, not an optimized attention kernel.
 
 When measuring real end-to-end training throughput at sequence length 256 on Apple Silicon:
 - TransformerLM (learned positional embeddings): 20,375 tokens/second.
 - ResonatorLM: 17,629 tokens/second.
 - TransformerLM (RoPE): 13,534 tokens/second.
 
-Transformer with standard attention trains slightly faster than ResonatorLM at short context lengths because simple matrix multiplications carry less kernel launch and padding overhead than real FFTs. ResonatorLM gains its speed advantage only during long prefill sequences and during autoregressive generation where its state lookup takes 0.15 ms per token compared to 2.5 ms per token for attention at 8K context.
+Transformer with standard attention trains slightly faster than ResonatorLM at short context lengths because simple matrix multiplications carry less kernel launch and padding overhead than real FFTs. ResonatorLM gains its speed advantage only during long prefill sequences and during autoregressive generation where its state lookup takes 0.18 ms per token compared to 2.58 ms per token for attention at 8K context.
 
 ---
 

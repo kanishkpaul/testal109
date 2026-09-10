@@ -23,7 +23,6 @@ def benchmark_memory(
     Both figures are whole-model totals. Per-layer figures are these divided by
     n_layers; the ratio between the two columns is identical either way.
     """
-    device = torch.device(device_str)
     results = []
 
     print("\n=== Memory Benchmark: KV Cache vs Recurrent State ===")
@@ -54,6 +53,12 @@ def benchmark_memory(
             "res_state_kib": res_kib,
             "ratio": ratio,
         })
+
+    os.makedirs("results", exist_ok=True)
+    with open(os.path.join("results", "benchmark_memory.csv"), "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
+        writer.writeheader()
+        writer.writerows(results)
 
     return results
 

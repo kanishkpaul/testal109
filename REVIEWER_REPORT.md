@@ -71,7 +71,7 @@ When implemented strictly as printed in the paper with $e^{-i\phi_h}$, the maxim
 
 ### 3.4. Overstated Speedup Claims ($575\times$) via Incommensurable Baselines
 Section 5.3 reports a "$575\times$ speedup at 32K context length." 
-Upon auditing Section 5.3 lines 233–235, this benchmark does not measure end-to-end forward/backward language model passes, nor does it benchmark against optimized attention kernels like FlashAttention-2 or FlashAttention-3. Instead, it benchmarks a single isolated PyTorch FFT against an unvectorized, quadratic nested-loop causal reference in single precision. When evaluating actual end-to-end inference decoding throughput, ResonatorLM achieves 17,629 tok/s versus 20,375 tok/s for TransformerLM at sequence length 256.
+Upon auditing Section 5.3 lines 233–235, this benchmark does not measure end-to-end forward/backward language model passes, nor does it benchmark against optimized attention kernels, and does not report which PyTorch SDPA backend was selected. Instead, it benchmarks a single isolated PyTorch FFT against an unvectorized, quadratic nested-loop causal reference in single precision. When evaluating actual end-to-end inference decoding throughput, ResonatorLM achieves 17,629 tok/s versus 20,375 tok/s for TransformerLM at sequence length 256.
 
 ### 3.5. Thermodynamic / Information-Theoretic Limit on "1M Context"
 The paper speculates that ResonatorLM can naturally maintain memory across 1M+ context lengths due to $O(1)$ state. However, the parameterization restricts head half-lives to:
@@ -79,8 +79,8 @@ $$\alpha_h = 10^{-4} + \text{softplus}(\tilde{\alpha}_h) \ge 10^{-4} \implies t_
 with the reported and initialized modes sitting at $t_{1/2} \le 2048$.
 Under continuous exponential decay $e^{-\alpha t}$:
 - At $t = 32,768$ tokens ($16 \times t_{1/2}$), signal amplitude decays to $2^{-16} \approx 1.5 \times 10^{-5}$ ($0.0015\%$).
-- At $t = 100,000$ tokens ($48.8 \times t_{1/2}$), amplitude drops to $2 \times 10^{-15}$ (at the limit of float64, far below bfloat16/float32 precision).
-- At $t = 1,000,000$ tokens ($488 \times t_{1/2}$), amplitude drops to $10^{-147}$ (absolute numerical underflow to zero).
+- At $t = 100,000$ tokens ($48.8 \times t_{1/2}$), amplitude drops to $2 \times 10^{-15}$ (still representable in float32; the barrier is signal to noise, not numerics).
+- At $t = 1,000,000$ tokens ($488 \times t_{1/2}$), amplitude drops to $10^{-147}$ (representable in float64, identically zero in float32/bfloat16).
 Therefore, without unbounded or trainable non-decaying modes ($\alpha \to 0$), the model has zero effective memory of tokens beyond ~10,000–20,000 steps. Claiming 1M context capabilities is physical and numerical fiction for this parameterization.
 
 ---

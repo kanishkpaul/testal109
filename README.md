@@ -111,6 +111,8 @@ This repository contains an independent scientific reproduction and audit of arX
 
 ## How to Run the Tests
 
+The data pipeline test reads `data/wikitext-2-raw/`, which is gitignored (see *Note on artifacts* above). Place `wiki.{train,valid,test}.raw` there before running the suite, and the context sweep additionally needs the trained checkpoints.
+
 ```bash
 # Run all unit tests (kernel correctness, SSM equivalence, parameter parity)
 python -m unittest discover -s tests/ -v
