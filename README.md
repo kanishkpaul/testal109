@@ -49,6 +49,7 @@ For the full breakdown written for researchers, see [**`FINDINGS.md`**](FINDINGS
 ## Repository Structure
 
 ```text
+├── LICENSE                     # MIT License for open scientific reproduction
 ├── FINDINGS.md                 # Core audit discoveries and technical recommendations
 ├── REPRODUCTION_REPORT.md      # Primary scientific reproduction report
 ├── REVIEWER_REPORT.md          # Academic peer review report
@@ -74,6 +75,13 @@ For the full breakdown written for researchers, see [**`FINDINGS.md`**](FINDINGS
 │   └── half_life_decay_audit.csv
 └── scripts/                    # Profiling, evaluation, and plotting scripts
 ```
+
+---
+
+## Branches and Licensing
+
+- **`main` (this branch)**: Contains the pure, independent scientific reproduction and audit of arXiv:2607.05583v2. Released under the permissive **MIT License** ([`LICENSE`](LICENSE)).
+- **`improvements` branch**: Contains novel architectural extensions (Selective Resonator with dynamic input gating, Long-Context Carrier Modes with multi-million-token half-lives, and Hybrid Resonator-Attention LM). Released under the **Research Use & Anti-Scooping License (v1.0)**, requiring prior written consent from Kanishk Paul for derivative academic publications or commercial deployments.
 
 ---
 
