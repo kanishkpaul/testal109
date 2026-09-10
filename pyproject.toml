@@ -1,0 +1,16 @@
+[project]
+name = "resonatorlm-reproduction"
+version = "0.1.0"
+description = "Independent scientific reproduction and audit of ResonatorLM (arXiv:2607.05583v2)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.1.0",
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+    "matplotlib>=3.8.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
