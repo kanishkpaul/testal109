@@ -48,7 +48,9 @@ The maximum absolute error between the FFT convolution and the recurrent steppin
 ---
 
 ### Finding 2: The Transformer Long-Context Failure is Caused by Outdated Positional Embeddings
-The centerpiece plot in the paper shows TransformerLM collapsing at 512 and 1024 context lengths (perplexity jumping from 3.40 to 20.00, and accuracy dropping from 63.6% to 30.0%), while ResonatorLM stays rock-solid around 3.29.
+Being precise about whose numbers are whose, because this matters. The paper reports, at 512 and 1024, Transformer perplexity of 8.696 and 11.022 against ResonatorLM's 4.339 and 4.502. So its Transformer degrades sharply while its ResonatorLM also degrades, just far less. There is no plot of this in the paper; its only figure is a speedup chart.
+
+Our own replication shows the same direction but with different magnitudes: Transformer 3.401 to 11.169 to 20.001 and ResonatorLM 3.322 to 3.301 to 3.293. Ours is flatter partly because we evaluate a 256-trained model zero-shot at longer lengths, whereas the paper's rows read as separate training runs per length. The numbers below are ours unless stated otherwise.
 
 The paper never mentions what positional encoding was used. In our experiments, we confirmed that using learned absolute positional embeddings causes this exact crash. A lookup table trained on positions 0 through 255 has no valid representations for positions past 255.
 
