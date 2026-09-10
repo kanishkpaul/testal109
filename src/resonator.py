@@ -177,14 +177,16 @@ class ResonantFieldMixer(nn.Module):
         # Pad to >= 2 * T to guarantee linear rather than circular convolution
         n_fft = next_power_of_2(2 * t_seq)
 
-        u_perm = u.permute(0, 2, 3, 1)  # (B, H, D_h, T)
-        k_expanded = k.unsqueeze(0).unsqueeze(2)  # (1, H, 1, T)
+        # Reshape u to 2D (B * H * D_h, T) to use native 2D FFT without 4D padding warnings on MPS
+        u_flat = u.permute(0, 2, 3, 1).contiguous().view(b * self.n_heads * self.head_dim, t_seq)
+        u_f = torch.fft.rfft(u_flat, n=n_fft, dim=-1)
 
-        u_f = torch.fft.rfft(u_perm, n=n_fft, dim=-1)
-        k_f = torch.fft.rfft(k_expanded, n=n_fft, dim=-1)
+        # Compute FFT of kernel directly on (H, T) -> (H, F) then broadcast
+        k_f = torch.fft.rfft(k, n=n_fft, dim=-1)  # (H, F)
+        k_f_exp = k_f.unsqueeze(0).unsqueeze(2).expand(b, self.n_heads, self.head_dim, -1).reshape(b * self.n_heads * self.head_dim, -1)
 
-        y_conv = torch.fft.irfft(u_f * k_f, n=n_fft, dim=-1)[..., :t_seq]
-        y = y_conv.permute(0, 3, 1, 2)  # (B, T, H, D_h)
+        y_conv = torch.fft.irfft(u_f * k_f_exp, n=n_fft, dim=-1)[:, :t_seq]
+        y = y_conv.view(b, self.n_heads, self.head_dim, t_seq).permute(0, 3, 1, 2)  # (B, T, H, D_h)
 
         y_coupled = self._apply_coupling(y).reshape(b, t_seq, d)
         z = gamma * y_coupled
