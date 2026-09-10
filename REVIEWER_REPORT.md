@@ -44,7 +44,7 @@ The paper evaluates a 6-layer, 6.04M-parameter ResonatorLM on WikiText-2 (charac
 ## 3. Critical Weaknesses & Methodological Flaws
 
 ### 3.1. Strawman Baseline: Positional Encoding Confound in Long-Context Evaluation
-The paper's centerpiece empirical claim—that ResonatorLM maintains a 3.29 PPL at length 1024 while TransformerLM degrades catastrophically from 3.40 to 20.00—is **an artifact of evaluating a Transformer trained with learned absolute positional embeddings beyond its training horizon**.
+The paper's centerpiece empirical claim, that ResonatorLM reaches 4.502 PPL at length 1024 while its Transformer degrades to 11.022 (our replication reproduces that ordering with sharper magnitudes, 3.293 against 20.001, under zero-shot extrapolation rather than per-length training), is **an artifact of evaluating a Transformer trained with learned absolute positional embeddings beyond its training horizon**.
 
 - **Empirical Audit**: In our independent replication, evaluating the paper's learned-PE Transformer trained on sequence length 256 at length 1024 replicates the paper's exact failure (PPL rises to 20.00, accuracy falls from 63.6% to 30.01%).
 - **Strong Control**: Replacing learned positional embeddings with Rotary Position Embeddings (RoPE)—the universal modern standard for Transformer language modeling—completely refutes this narrative:
